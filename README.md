@@ -78,6 +78,27 @@ Checks performed:
 
 These checks target content-heavy pages (articles, docs, blog posts). For pure app UIs, edit the checks in `verify-layout.js` to match what matters for your project.
 
+## Pluggable verify command
+
+The verify step is configurable. Set `verifyCommand` in `blog-publish.config.json` to use any script:
+
+```json
+{
+  "verifyCommand": "node scripts/verify-layout.js"
+}
+```
+
+Claude reads this value after push and runs `<verifyCommand> <slug>`. You can swap it for your own script — the only convention it expects is that the script accepts a slug/identifier as the first argument and exits with code 1 on failure.
+
+Examples:
+```json
+{ "verifyCommand": "node scripts/verify-electron.js" }
+{ "verifyCommand": "python scripts/verify_page.py" }
+{ "verifyCommand": "bash scripts/smoke-test.sh" }
+```
+
+If your verify script outputs screenshot paths (as `verify-layout.js` does), Claude will `Read` them for visual confirmation. If it doesn't, the text output alone is used.
+
 ## Adapting to your stack
 
 The workflow assumes pages are accessible at `<baseUrl>/<slug>` or `<baseUrl>/<locale>/blog/<slug>`.

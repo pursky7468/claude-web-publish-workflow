@@ -38,11 +38,13 @@ async function main() {
   const baseUrl = await ask(`Production base URL [${existing.baseUrl || 'https://your-site.vercel.app'}]: `)
   const blogPath = await ask(`Blog content path [${existing.blogPath || 'content/blog'}]: `)
   const waitSec = await ask(`Deploy wait seconds [${existing.deployWaitSeconds || 90}]: `)
+  const verifyCommand = await ask(`Verify command [${existing.verifyCommand || 'node scripts/verify-layout.js'}]: `)
 
   const config = {
     baseUrl: baseUrl.trim() || existing.baseUrl || 'https://your-site.vercel.app',
     blogPath: blogPath.trim() || existing.blogPath || 'content/blog',
     deployWaitSeconds: parseInt(waitSec.trim(), 10) || existing.deployWaitSeconds || 90,
+    verifyCommand: verifyCommand.trim() || existing.verifyCommand || 'node scripts/verify-layout.js',
   }
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n')
