@@ -1,25 +1,25 @@
-# Blog Content Rules
+# Web Publish Workflow Rules
 
 ## Agents
 
-Blog 工作流由兩個 agent + 一個 script 分工：
+發布工作流由兩個 agent + 一個 script 分工：
 
 | 步驟 | 工具 | 職責 | 時機 |
 |---|---|---|---|
-| 1 | `Agent(web-content-publisher)` | 來源文件 → `.mdx` + frontmatter + commit + push | 每次發佈 |
+| 1 | `Agent(web-content-publisher)` | 來源文件 → 格式化檔案 + commit + push | 每次發佈 |
 | 2 | `Agent(web-content-reviewer)` | 內容完整性、準確性、無造假 | publisher 完成後自動接 |
 | 3 | `Bash: node scripts/verify-layout.js <slug>` | Playwright 截圖、渲染/排版/亂碼檢查 | reviewer 完成後，等 deployment 完成再執行 |
-| 4 | `Read` 三張截圖 | **視覺確認**：背景、表格框線、code block 高亮、亂碼 | verify-layout.js 完成後立刻執行 |
+| 4 | `Read` 截圖 | **視覺確認**：排版、框線、語法高亮、亂碼 | verify-layout.js 完成後立刻執行 |
 
-不要在主對話中直接寫 blog 內容，改用 `Agent` tool 並指定對應的 `subagent_type`。
+不要在主對話中直接寫內容，改用 `Agent` tool 並指定對應的 `subagent_type`。
 
 ## 標準發佈流程
 
 ```
-1. Agent(web-content-publisher)               → 寫內容、轉 .mdx、commit、push
+1. Agent(web-content-publisher)               → 寫內容、轉格式、commit、push
 2. Agent(web-content-reviewer)                → 審核內容品質，回傳報告
 3. node scripts/verify-layout.js <slug>       → 等 deployment 完成後，Bash 直接執行
-4. Read 截圖做視覺確認                         → 讀 verify-layout.js 產生的三張 .png，逐一檢查
+4. Read 截圖做視覺確認                         → 讀 verify-layout.js 產生的截圖，逐一檢查
 ```
 
 ## 執行規則
@@ -30,14 +30,16 @@ Blog 工作流由兩個 agent + 一個 script 分工：
 - 四者結果合併為一份報告，最後一起呈現給使用者
 - 單獨呼叫「review」= reviewer + verify-layout script + 視覺確認全跑，缺一不可
 - **Layout 驗證必須用 `node scripts/verify-layout.js`，不使用 agent**
-- **verify-layout.js 跑完後必須 Read 三張截圖（full / table / code），文字 PASS 不代表視覺正確**
+- **verify-layout.js 跑完後必須 Read 截圖（full / table / code），文字 PASS 不代表視覺正確**
 
 ## 格式規範
+
+依照專案的內容格式規範執行。預設為 MDX：
 
 - 副檔名一律 `.mdx`（不使用 `.md`）
 - 若來源是 `.md`：建立 `.mdx` 後刪除原檔
 
-### Frontmatter schema
+### 預設 Frontmatter schema（MDX blog）
 
 ```yaml
 ---
@@ -56,7 +58,9 @@ draft: false
 - 有無亂碼（`???`、方塊字、`â€` 等）
 - 標題層級是否正確，排版是否易讀
 
-### 常見問題
+針對非 blog 頁面（如 landing page、docs），可在 `scripts/verify-layout.js` 加入對應的 selector 檢查。
+
+### 常見問題（MDX stack）
 
 | 症狀 | 原因 | 修法 |
 |---|---|---|
