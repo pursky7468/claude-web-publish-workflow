@@ -1,0 +1,17 @@
+{
+  "name": "claude-blog-publish-workflow",
+  "version": "1.0.0",
+  "description": "Claude Code agent workflow for publishing MDX blog posts with automated layout verification",
+  "main": "setup.js",
+  "scripts": {
+    "setup": "node setup.js"
+  },
+  "keywords": ["claude-code", "blog", "mdx", "playwright", "vercel"],
+  "license": "MIT",
+  "peerDependencies": {
+    "playwright": ">=1.40.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
