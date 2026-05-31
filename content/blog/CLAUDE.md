@@ -2,35 +2,39 @@
 
 ## Agents
 
-發布工作流由兩個 agent + 一個 script 分工：
+發布工作流由兩個 agent + 一組 scripts 分工：
 
 | 步驟 | 工具 | 職責 | 時機 |
 |---|---|---|---|
 | 1 | `Agent(web-content-publisher)` | 來源文件 → 格式化檔案 + commit + push | 每次發佈 |
 | 2 | `Agent(web-content-reviewer)` | 內容完整性、準確性、無造假 | publisher 完成後自動接 |
-| 3 | `Bash: <verifyCommand> <slug>`（讀 `blog-publish.config.json`） | 截圖 + 版面檢查 | reviewer 完成後，等 deployment 完成再執行 |
-| 4 | `Read` 截圖 | **視覺確認**：排版、框線、語法高亮、亂碼 | verify-layout.js 完成後立刻執行 |
+| 3 | `Bash: <每個 verifyCommands>`（讀 `blog-publish.config.json`） | 截圖 + 版面/功能檢查，依序執行全部 | reviewer 完成後，等 deployment 完成再執行 |
+| 4 | `Read` 截圖 | **視覺確認**：排版、框線、語法高亮、亂碼 | 每個 verifyCommand 完成後立刻執行 |
 
 不要在主對話中直接寫內容，改用 `Agent` tool 並指定對應的 `subagent_type`。
 
 ## 標準發佈流程
 
 ```
-1. Agent(web-content-publisher)               → 寫內容、轉格式、commit、push
-2. Agent(web-content-reviewer)                → 審核內容品質，回傳報告
-3. <verifyCommand> <slug>                      → 讀 blog-publish.config.json 的 verifyCommand，等 deployment 完成後，Bash 直接執行
-4. Read 截圖做視覺確認                         → 讀 verify-layout.js 產生的截圖，逐一檢查
+1. Agent(web-content-publisher)     → 寫內容、轉格式、commit、push
+2. Agent(web-content-reviewer)      → 審核內容品質，回傳報告
+3. 讀 blog-publish.config.json      → 取得 verifyCommands 陣列
+   for each command in verifyCommands:
+     Bash: <command> <slug>         → 等 deployment 完成後執行
+     Read 截圖                      → 視覺確認（有截圖輸出的腳本才需要）
+4. 合併所有結果，一次呈現給使用者
 ```
 
 ## 執行規則
 
 - 四個步驟是同一次發佈的完整流程，**不可拆開**
 - 每個步驟完成後，不等使用者確認，立刻接著跑下一步
-- **git push 後不可問使用者何時執行驗證**：讀取 `blog-publish.config.json` 的 `deployWaitSeconds` 和 `verifyCommand`，用 `ScheduleWakeup` 排程後自動跑，不需要使用者介入
-- 四者結果合併為一份報告，最後一起呈現給使用者
-- 單獨呼叫「review」= reviewer + verify-layout script + 視覺確認全跑，缺一不可
-- **Layout 驗證必須用 `verifyCommand`（從 config 讀取），不使用 agent**
-- **verifyCommand 跑完後必須 Read 截圖，文字 PASS 不代表視覺正確**（適用於有截圖輸出的驗證腳本）
+- **git push 後不可問使用者何時執行驗證**：讀取 `blog-publish.config.json` 的 `deployWaitSeconds`，用 `ScheduleWakeup` 排程後自動跑，不需要使用者介入
+- **`verifyCommands` 是陣列，必須全部跑完**，不可只跑第一個
+- 每個 command 跑完後，若輸出包含截圖路徑，立刻 `Read` 做視覺確認——**文字 PASS 不代表視覺正確**
+- 所有 verifyCommands 的結果合併為一份報告，最後一起呈現給使用者
+- 單獨呼叫「review」= reviewer + 全部 verifyCommands + 視覺確認全跑，缺一不可
+- **驗證必須用 `verifyCommands`（從 config 讀取），不使用 agent**
 
 ## 格式規範
 

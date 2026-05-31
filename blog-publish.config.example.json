@@ -2,5 +2,8 @@
   "baseUrl": "https://your-site.vercel.app",
   "blogPath": "content/blog",
   "deployWaitSeconds": 90,
-  "verifyCommand": "node scripts/verify-layout.js"
+  "verifyCommands": [
+    "node scripts/verify-layout.js",
+    "node scripts/verify-functional.js"
+  ]
 }
