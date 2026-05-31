@@ -24,7 +24,7 @@ function copyFile(src, dest) {
 }
 
 async function main() {
-  console.log(`\nclaude-blog-publish-workflow setup`)
+  console.log(`\nclaude-web-publish-workflow setup`)
   console.log(`Target: ${TARGET}\n`)
 
   // Load existing config if present
@@ -66,18 +66,26 @@ async function main() {
     copyFile(path.join(agentSrc, file), dest)
   }
 
-  // Copy verify-layout.js
+  // Copy scripts
   console.log('\nCopying scripts...')
-  const scriptDest = path.join(TARGET, 'scripts', 'verify-layout.js')
-  if (fs.existsSync(scriptDest)) {
-    const overwrite = await ask('  scripts/verify-layout.js already exists. Overwrite? [y/N]: ')
-    if (overwrite.trim().toLowerCase() === 'y') {
-      copyFile(path.join(PACKAGE_ROOT, 'scripts', 'verify-layout.js'), scriptDest)
+  const scriptsToCopy = [
+    { src: 'verify-layout.js', note: '' },
+    { src: 'verify-functional.js', note: ' (template — customize TESTS array for your site)' },
+  ]
+  for (const { src, note } of scriptsToCopy) {
+    const scriptDest = path.join(TARGET, 'scripts', src)
+    if (fs.existsSync(scriptDest)) {
+      const overwrite = await ask(`  scripts/${src} already exists. Overwrite? [y/N]: `)
+      if (overwrite.trim().toLowerCase() === 'y') {
+        copyFile(path.join(PACKAGE_ROOT, 'scripts', src), scriptDest)
+        if (note) console.log(`  note:${note}`)
+      } else {
+        console.log(`  skipped ${src}`)
+      }
     } else {
-      console.log('  skipped verify-layout.js')
+      copyFile(path.join(PACKAGE_ROOT, 'scripts', src), scriptDest)
+      if (note) console.log(`  note:${note}`)
     }
-  } else {
-    copyFile(path.join(PACKAGE_ROOT, 'scripts', 'verify-layout.js'), scriptDest)
   }
 
   // Copy CLAUDE.md (optional)
