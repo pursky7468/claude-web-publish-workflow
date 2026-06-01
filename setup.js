@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// setup.js — install claude-blog-publish-workflow into a target project
+// setup.js — install claude-web-publish-workflow into a target project
 //
 // Usage:
 //   node setup.js                        # install into current directory
 //   node setup.js --target /path/to/blog # install into specified directory
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const readline = require('readline')
 
@@ -16,11 +17,83 @@ const PACKAGE_ROOT = __dirname
 const targetIdx = process.argv.indexOf('--target')
 const TARGET = targetIdx >= 0 ? path.resolve(process.argv[targetIdx + 1]) : process.cwd()
 
-function copyFile(src, dest) {
+function copyFile(src, dest, label) {
   const destDir = path.dirname(dest)
   if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
   fs.copyFileSync(src, dest)
-  console.log(`  copied → ${path.relative(TARGET, dest)}`)
+  console.log(`  copied → ${label || dest}`)
+}
+
+async function setupUserLevel() {
+  const homeDir = os.homedir()
+  const claudeDir = path.join(homeDir, '.claude')
+
+  console.log('\n--- User-level Setup ---')
+  console.log('Installs shared workflow rules + dispatcher hook (~/.claude/).')
+  console.log('One-time setup — all future projects will inherit these automatically.')
+
+  const doUserLevel = await ask('Set up user-level rules and dispatcher? [Y/n]: ')
+  if (doUserLevel.trim().toLowerCase() === 'n') return false
+
+  // Install ~/.claude/rules/workflows.md
+  const rulesDir = path.join(claudeDir, 'rules')
+  const workflowsMd = path.join(rulesDir, 'workflows.md')
+  const workflowsSrc = path.join(PACKAGE_ROOT, 'user-level', 'rules', 'workflows.md')
+  if (fs.existsSync(workflowsMd)) {
+    const ow = await ask('  ~/.claude/rules/workflows.md already exists. Overwrite? [y/N]: ')
+    if (ow.trim().toLowerCase() === 'y') copyFile(workflowsSrc, workflowsMd, '~/.claude/rules/workflows.md')
+    else console.log('  skipped ~/.claude/rules/workflows.md')
+  } else {
+    copyFile(workflowsSrc, workflowsMd, '~/.claude/rules/workflows.md')
+  }
+
+  // Install ~/.claude/hooks/dispatcher.js
+  const hooksDir = path.join(claudeDir, 'hooks')
+  const dispatcherDest = path.join(hooksDir, 'dispatcher.js')
+  const dispatcherSrc = path.join(PACKAGE_ROOT, 'hooks', 'dispatcher.js')
+  if (fs.existsSync(dispatcherDest)) {
+    const ow = await ask('  ~/.claude/hooks/dispatcher.js already exists. Overwrite? [y/N]: ')
+    if (ow.trim().toLowerCase() === 'y') copyFile(dispatcherSrc, dispatcherDest, '~/.claude/hooks/dispatcher.js')
+    else console.log('  skipped ~/.claude/hooks/dispatcher.js')
+  } else {
+    copyFile(dispatcherSrc, dispatcherDest, '~/.claude/hooks/dispatcher.js')
+  }
+
+  // Update ~/.claude/settings.json
+  const settingsPath = path.join(claudeDir, 'settings.json')
+  let settings = {}
+  if (fs.existsSync(settingsPath)) {
+    try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')) } catch {}
+  }
+
+  const dispatcherCmd = process.platform === 'win32'
+    ? `node ${dispatcherDest.replace(/\\/g, '\\\\')}`
+    : `node ${dispatcherDest}`
+
+  const alreadyHasDispatcher = (settings.hooks?.PostToolUse || []).some(rule =>
+    (rule.hooks || []).some(h => h.command?.includes('dispatcher.js'))
+  )
+
+  if (!alreadyHasDispatcher) {
+    if (!settings.hooks) settings.hooks = {}
+    if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = []
+    settings.hooks.PostToolUse.push({
+      matcher: 'Bash|PowerShell',
+      hooks: [{
+        type: 'command',
+        command: dispatcherCmd,
+        timeout: 15,
+        statusMessage: 'Running post-push checks...',
+      }],
+    })
+    if (!fs.existsSync(claudeDir)) fs.mkdirSync(claudeDir, { recursive: true })
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n')
+    console.log('  updated ~/.claude/settings.json (PostToolUse dispatcher added)')
+  } else {
+    console.log('  ~/.claude/settings.json already has dispatcher — skipped')
+  }
+
+  return true
 }
 
 async function main() {
@@ -53,6 +126,9 @@ async function main() {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n')
   console.log(`\n✓ Wrote blog-publish.config.json`)
 
+  // User-level setup
+  const userLevelInstalled = await setupUserLevel()
+
   // Copy agents
   console.log('\nCopying agent definitions...')
   const agentSrc = path.join(PACKAGE_ROOT, '.claude', 'agents')
@@ -64,6 +140,20 @@ async function main() {
       if (overwrite.trim().toLowerCase() !== 'y') { console.log(`  skipped ${file}`); continue }
     }
     copyFile(path.join(agentSrc, file), dest)
+  }
+
+  // Copy project hook
+  console.log('\nCopying project hook...')
+  const projectHookSrc = path.join(PACKAGE_ROOT, 'project-hooks', 'post-push.js')
+  if (fs.existsSync(projectHookSrc)) {
+    const projectHookDest = path.join(TARGET, '.claude', 'hooks', 'post-push.js')
+    if (fs.existsSync(projectHookDest)) {
+      const ow = await ask('  .claude/hooks/post-push.js already exists. Overwrite? [y/N]: ')
+      if (ow.trim().toLowerCase() === 'y') copyFile(projectHookSrc, projectHookDest)
+      else console.log('  skipped .claude/hooks/post-push.js')
+    } else {
+      copyFile(projectHookSrc, projectHookDest)
+    }
   }
 
   // Copy scripts
@@ -88,23 +178,38 @@ async function main() {
     }
   }
 
-  // Copy CLAUDE.md (optional)
+  // Copy CLAUDE.md
+  const claudeMdSrc = userLevelInstalled
+    ? path.join(PACKAGE_ROOT, 'content', 'blog', 'CLAUDE.md')
+    : path.join(PACKAGE_ROOT, 'content', 'blog', 'CLAUDE.standalone.md')
   const claudeMdDest = path.join(TARGET, config.blogPath, 'CLAUDE.md')
   console.log('\nCopying CLAUDE.md workflow rules...')
-  if (fs.existsSync(claudeMdDest)) {
-    const overwrite = await ask(`  ${config.blogPath}/CLAUDE.md already exists. Overwrite? [y/N]: `)
-    if (overwrite.trim().toLowerCase() === 'y') {
-      copyFile(path.join(PACKAGE_ROOT, 'content', 'blog', 'CLAUDE.md'), claudeMdDest)
-    } else {
-      console.log('  skipped CLAUDE.md')
+  if (!fs.existsSync(claudeMdSrc)) {
+    // fallback: use whichever exists
+    const fallback = path.join(PACKAGE_ROOT, 'content', 'blog', 'CLAUDE.md')
+    if (fs.existsSync(fallback)) {
+      if (fs.existsSync(claudeMdDest)) {
+        const ow = await ask(`  ${config.blogPath}/CLAUDE.md already exists. Overwrite? [y/N]: `)
+        if (ow.trim().toLowerCase() === 'y') copyFile(fallback, claudeMdDest)
+        else console.log('  skipped CLAUDE.md')
+      } else {
+        copyFile(fallback, claudeMdDest)
+      }
     }
+  } else if (fs.existsSync(claudeMdDest)) {
+    const ow = await ask(`  ${config.blogPath}/CLAUDE.md already exists. Overwrite? [y/N]: `)
+    if (ow.trim().toLowerCase() === 'y') copyFile(claudeMdSrc, claudeMdDest)
+    else console.log('  skipped CLAUDE.md')
   } else {
-    copyFile(path.join(PACKAGE_ROOT, 'content', 'blog', 'CLAUDE.md'), claudeMdDest)
+    copyFile(claudeMdSrc, claudeMdDest)
   }
 
   console.log('\n✓ Setup complete.')
   console.log('\nNext steps:')
   console.log('  1. Install playwright: npm install -D playwright && npx playwright install chromium')
+  if (!userLevelInstalled) {
+    console.log('  2. (Optional) Re-run setup to enable user-level rules for multi-project sharing')
+  }
   console.log('  2. Open your project in Claude Code — the agents are ready to use.')
   console.log('  3. Ask Claude: "把這份筆記轉成 blog post 發佈"')
 
