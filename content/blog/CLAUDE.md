@@ -29,7 +29,7 @@
 
 - 四個步驟是同一次發佈的完整流程，**不可拆開**
 - 每個步驟完成後，不等使用者確認，立刻接著跑下一步
-- **git push 後不可問使用者何時執行驗證**：讀取 `blog-publish.config.json` 的 `deployWaitSeconds`，用 `ScheduleWakeup` 排程後自動跑，不需要使用者介入
+- **git push 後不可問使用者何時執行驗證**：讀取 `blog-publish.config.json` 的 `deployWaitSeconds`，用 `ScheduleWakeup` 排程後自動跑，不需要使用者介入——**必須用 `ScheduleWakeup`，不是 `CronCreate`**：ScheduleWakeup 保留當前 session context，verify 完成後才能合併 publisher/reviewer 結果為一份報告；CronCreate 開新 session，取不到前兩步的結果
 - **`verifyCommands` 是陣列，必須全部跑完**，不可只跑第一個
 - 每個 command 跑完後，若輸出包含截圖路徑，立刻 `Read` 做視覺確認——**文字 PASS 不代表視覺正確**
 - 所有 verifyCommands 的結果合併為一份報告，最後一起呈現給使用者
